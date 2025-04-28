@@ -1,27 +1,41 @@
+# .gitlab-ci.yml
+
 stages:
   - deploy
 
 upload_to_s3:
   stage: deploy
-  image: amazon/aws-cli:latest
+  image: amazon/aws-cli:2.4.20  # Usando uma versão específica mais antiga
   script:
-    # Configurar as credenciais do S3 compatível (não-AWS)
+    # Configurar as credenciais do S3 compatível
     - aws configure set aws_access_key_id $keyID_s3
     - aws configure set aws_secret_access_key $applicationKey_s3
-    - aws configure set default.region us-east-1  # Região pode ser qualquer uma quando usando endpoint personalizado
+    - aws configure set default.region us-east-1
     - aws configure set default.s3.addressing_style path
     
-    # Verificar existência da pasta
+    # Desativar recursos avançados que podem não ser compatíveis com S3 de terceiros
+    - aws configure set default.s3.payload_signing_enabled false
+    - aws configure set default.s3.use_dualstack_endpoint false
+    - aws configure set default.s3.use_accelerate_endpoint false
+    
+    # Verificar existência da pasta local
     - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
     
-    # Listar arquivos a serem enviados (para log)
+    # Listar arquivos a serem enviados
     - echo "Arquivos que serão enviados:"
     - ls -la GeoIP_Paises/
     
-    # Enviar arquivos para o S3 usando endpoint personalizado
-    - aws s3 sync GeoIP_Paises/ s3://$bucket_s3/GeoIP-Paises/ --endpoint-url=$endpoint_s3 --no-progress
-    
-    # Verificar se o upload foi bem-sucedido
+    # Enviar arquivos para o S3 com flags para máxima compatibilidade
+    - echo "Enviando arquivos para s3://$bucket_s3/GeoIP-Paises/"
+    - >
+      aws s3 sync GeoIP_Paises/ s3://$bucket_s3/GeoIP-Paises/ 
+      --endpoint-url=$endpoint_s3
+      --no-verify-ssl
+      --no-progress
+      --no-follow-symlinks
+      --no-sign-request
+      
+    # Verificar o upload
     - echo "Verificando arquivos no bucket..."
     - aws s3 ls s3://$bucket_s3/GeoIP-Paises/ --endpoint-url=$endpoint_s3
   only:
