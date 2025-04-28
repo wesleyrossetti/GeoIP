@@ -1,31 +1,48 @@
 stages:
+  - build
   - deploy
+
+generate_geoip_lists:
+  stage: build
+  image: python:3.9
+  script:
+    # Instalar dependências
+    - pip install -r requirements.txt
+    
+    # Verificar se o arquivo MMDB está disponível
+    - if [ ! -f "GeoLite2-Country.mmdb" ]; then echo "Arquivo GeoLite2-Country.mmdb não encontrado!"; exit 1; fi
+    
+    # Executar o script gerador
+    - python gerador_de_listas.py
+    
+    # Verificar se a pasta foi criada corretamente
+    - ls -la GeoIP_Paises/
+  artifacts:
+    paths:
+      - GeoIP_Paises/
+    expire_in: 1 hour
+  only:
+    - main
 
 upload_to_backblaze:
   stage: deploy
-  image: minio/mc:latest  # Imagem oficial do MinIO Client
+  image: minio/mc:latest
   script:
     # Configurar o alias para o Backblaze
     - mc alias set backblaze $endpoint_s3 $keyID_s3 $applicationKey_s3
     
     # Verificar existência da pasta local
     - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
+    
+    # Listagem pré-upload para referência
     - echo "Arquivos a serem enviados:"
-    - ls -la GeoIP_Paises/
+    - ls -la GeoIP_Paises/ | wc -l
     
-    # Fazer upload diretamente para o bucket específico
-    - echo "Enviando arquivos para o bucket $bucket_s3..."
-    - |
-      cd GeoIP_Paises
-      for file in *; do
-        if [ -f "$file" ]; then
-          echo "Enviando $file para backblaze/$bucket_s3/GeoIP-Paises/"
-          mc cp "$file" "backblaze/$bucket_s3/GeoIP-Paises/" || echo "Erro ao enviar $file"
-        fi
-      done
+    # Upload otimizado com logs detalhados
+    - echo "Iniciando upload para backblaze/$bucket_s3/GeoIP-Paises/"
+    - mc cp --recursive --concurrent 20 GeoIP_Paises/ "backblaze/$bucket_s3/GeoIP-Paises/"
     
-    # Tentar listar os arquivos no bucket específico (apenas como verificação)
-    - echo "Tentando listar arquivos no bucket..."
-    - mc ls "backblaze/$bucket_s3/GeoIP-Paises/" || echo "Não foi possível listar, mas o upload pode ter funcionado"
+    # Confirmação de sucesso
+    - echo "Upload concluído com sucesso!"
   only:
     - main
