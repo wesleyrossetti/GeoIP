@@ -1,53 +1,23 @@
 stages:
   - deploy
 
-upload_to_backblaze:
+upload_to_backblaze_alt:
   stage: deploy
-  image: python:3.9-alpine
+  image: minio/mc:latest  # Cliente MinIO, excelente para S3 compatível
   script:
-    # Instalar AWS CLI
-    - pip install awscli
+    # Configurar credenciais usando cliente MinIO
+    - mc alias set backblaze $endpoint_s3 $keyID_s3 $applicationKey_s3
     
-    # Configurar credenciais Backblaze B2
-    - mkdir -p ~/.aws
-    - >
-      echo "[default]
-      aws_access_key_id = $keyID_s3
-      aws_secret_access_key = $applicationKey_s3
-      region = us-west-002" > ~/.aws/credentials
+    # Verificar a configuração
+    - mc ls backblaze
+
+    # Fazer upload com cliente MinIO
+    - cd GeoIP_Paises && find . -type f -print0 | 
+      while IFS= read -r -d '' file; do
+        mc cp "$file" "backblaze/$bucket_s3/GeoIP-Paises/${file:2}"
+      done
     
-    # Configurar AWS CLI para B2
-    - >
-      echo "[default]
-      region = us-west-002
-      s3 =
-          signature_version = s3v4
-          addressing_style = virtual
-      [plugins]
-      endpoint = awscli_plugin_endpoint" > ~/.aws/config
-      
-    # Suprimir avisos de SSL
-    - export AWS_CA_BUNDLE=false
-    - export PYTHONWARNINGS="ignore:Unverified HTTPS request"
-    
-    # Verificar pasta local
-    - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
-    
-    # Listar arquivos a serem enviados
-    - ls -la GeoIP_Paises/
-    
-    # Upload para B2 com parâmetros corretos
-    - >
-      aws s3 sync GeoIP_Paises/ s3://$bucket_s3/GeoIP-Paises/
-      --endpoint-url=$endpoint_s3
-      --region=us-west-002
-      --no-verify-ssl
-      
-    # Verificar upload (com tratamento de erro)
-    - >
-      aws s3 ls s3://$bucket_s3/GeoIP-Paises/
-      --endpoint-url=$endpoint_s3
-      --region=us-west-002
-      --no-verify-ssl
+    # Listar arquivos enviados
+    - mc ls "backblaze/$bucket_s3/GeoIP-Paises/"
   only:
     - main
