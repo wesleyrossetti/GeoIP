@@ -34,15 +34,14 @@ upload_to_backblaze:
     # Verificar existência da pasta local
     - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
     
-    # Listagem pré-upload para referência
-    - echo "Arquivos a serem enviados:"
-    - ls -la GeoIP_Paises/ | wc -l
+    # Contar e exibir total de arquivos para referência
+    - TOTAL_FILES=$(find GeoIP_Paises -type f | wc -l)
+    - echo "Iniciando upload de $TOTAL_FILES arquivos para backblaze/$bucket_s3/GeoIP-Paises/"
     
-    # Upload otimizado com logs detalhados
-    - echo "Iniciando upload para backblaze/$bucket_s3/GeoIP-Paises/"
-    - mc cp --recursive --concurrent 20 GeoIP_Paises/ "backblaze/$bucket_s3/GeoIP-Paises/"
+    # Upload otimizado para arquivos pequenos
+    - mc cp --recursive --disable-multipart GeoIP_Paises/ "backblaze/$bucket_s3/GeoIP-Paises/"
     
     # Confirmação de sucesso
-    - echo "Upload concluído com sucesso!"
+    - echo "Upload de $TOTAL_FILES arquivos concluído com sucesso!"
   only:
     - main
