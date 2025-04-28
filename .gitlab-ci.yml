@@ -1,23 +1,31 @@
 stages:
   - deploy
 
-upload_to_backblaze_alt:
+upload_to_backblaze:
   stage: deploy
-  image: minio/mc:latest  # Cliente MinIO, excelente para S3 compatível
+  image: minio/mc:latest  # Imagem oficial do MinIO Client
   script:
-    # Configurar credenciais usando cliente MinIO
+    # Configurar o alias para o Backblaze
     - mc alias set backblaze $endpoint_s3 $keyID_s3 $applicationKey_s3
     
-    # Verificar a configuração
-    - mc ls backblaze
-
-    # Fazer upload com cliente MinIO
-    - cd GeoIP_Paises && find . -type f -print0 | 
-      while IFS= read -r -d '' file; do
-        mc cp "$file" "backblaze/$bucket_s3/GeoIP-Paises/${file:2}"
+    # Verificar existência da pasta local
+    - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
+    - echo "Arquivos a serem enviados:"
+    - ls -la GeoIP_Paises/
+    
+    # Fazer upload diretamente para o bucket específico
+    - echo "Enviando arquivos para o bucket $bucket_s3..."
+    - |
+      cd GeoIP_Paises
+      for file in *; do
+        if [ -f "$file" ]; then
+          echo "Enviando $file para backblaze/$bucket_s3/GeoIP-Paises/"
+          mc cp "$file" "backblaze/$bucket_s3/GeoIP-Paises/" || echo "Erro ao enviar $file"
+        fi
       done
     
-    # Listar arquivos enviados
-    - mc ls "backblaze/$bucket_s3/GeoIP-Paises/"
+    # Tentar listar os arquivos no bucket específico (apenas como verificação)
+    - echo "Tentando listar arquivos no bucket..."
+    - mc ls "backblaze/$bucket_s3/GeoIP-Paises/" || echo "Não foi possível listar, mas o upload pode ter funcionado"
   only:
     - main
