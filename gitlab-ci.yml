@@ -25,4 +25,4 @@ upload_to_s3:
     - echo "Verificando arquivos no bucket..."
     - aws s3 ls s3://$bucket_s3/GeoIP-Paises/ --endpoint-url=$endpoint_s3
   only:
-    - master
+    - main
