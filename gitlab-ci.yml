@@ -1,0 +1,28 @@
+stages:
+  - deploy
+
+upload_to_s3:
+  stage: deploy
+  image: amazon/aws-cli:latest
+  script:
+    # Configurar as credenciais do S3 compatível (não-AWS)
+    - aws configure set aws_access_key_id $keyID_s3
+    - aws configure set aws_secret_access_key $applicationKey_s3
+    - aws configure set default.region us-east-1  # Região pode ser qualquer uma quando usando endpoint personalizado
+    - aws configure set default.s3.addressing_style path
+    
+    # Verificar existência da pasta
+    - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
+    
+    # Listar arquivos a serem enviados (para log)
+    - echo "Arquivos que serão enviados:"
+    - ls -la GeoIP_Paises/
+    
+    # Enviar arquivos para o S3 usando endpoint personalizado
+    - aws s3 sync GeoIP_Paises/ s3://$bucket_s3/GeoIP-Paises/ --endpoint-url=$endpoint_s3 --no-progress
+    
+    # Verificar se o upload foi bem-sucedido
+    - echo "Verificando arquivos no bucket..."
+    - aws s3 ls s3://$bucket_s3/GeoIP-Paises/ --endpoint-url=$endpoint_s3
+  only:
+    - master
