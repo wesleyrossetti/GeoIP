@@ -20,10 +20,10 @@ generate_geoip_lists:
     # Baixar e extrair o MMDB
     - echo "Baixando o banco de dados GeoLite2-Country..."
     - curl -L -o "${EDITION_ID}.${SUFFIX}" "$DOWNLOAD_URL"
-    - tar -xzf "${EDITION_ID}.${SUFFIX}"
-    - MMDB_FILE=$(find . -type f -name "*.mmdb" | head -n1)
-    - cp "$MMDB_FILE" GeoLite2-Country.mmdb
-    
+    - mkdir -p geoip_tmp
+    - tar -xzf "${EDITION_ID}.${SUFFIX}" -C geoip_tmp --strip-components=1
+    - cp geoip_tmp/*.mmdb GeoLite2-Country.mmdb
+
     # Executar o script gerador
     - python gerador_de_listas.py
     
