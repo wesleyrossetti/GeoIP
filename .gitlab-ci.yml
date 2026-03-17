@@ -38,26 +38,41 @@ generate_geoip_lists:
 
 upload_to_backblaze:
   stage: deploy
-  image: alpine:latest
+  image: python:3.9
   before_script:
-    - apk add --no-cache curl
-    - curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-    - chmod +x /usr/local/bin/mc
+    - pip install boto3 --quiet
   script:
-    # Configurar o alias para o Backblaze
-    - mc alias set backblaze $endpoint_s3 $keyID_s3 $applicationKey_s3
-    
-    # Verificar existência da pasta local
-    - if [ ! -d "GeoIP_Paises" ]; then echo "Pasta GeoIP_Paises não encontrada!"; exit 1; fi
-    
-    # Contar e exibir total de arquivos para referência
-    - TOTAL_FILES=$(find GeoIP_Paises -type f | wc -l)
-    - echo "Iniciando upload de $TOTAL_FILES arquivos para backblaze/$bucket_s3/GeoIP-Paises/"
-    
-    # Upload otimizado para arquivos pequenos
-    - mc cp --recursive --disable-multipart GeoIP_Paises/ "backblaze/$bucket_s3/GeoIP-Paises/"
-    
-    # Confirmação de sucesso
-    - echo "Upload de $TOTAL_FILES arquivos concluído com sucesso!"
+    - |
+      python3 << 'EOF'
+      import boto3
+      import os
+      import sys
+      from pathlib import Path
+      from botocore.config import Config
+
+      local_dir = Path("GeoIP_Paises")
+      if not local_dir.is_dir():
+          print("Pasta GeoIP_Paises não encontrada!")
+          sys.exit(1)
+
+      s3 = boto3.client(
+          "s3",
+          endpoint_url=os.environ["endpoint_s3"],
+          aws_access_key_id=os.environ["keyID_s3"],
+          aws_secret_access_key=os.environ["applicationKey_s3"],
+          config=Config(signature_version="s3v4"),
+      )
+
+      bucket = os.environ["bucket_s3"]
+      files = [f for f in local_dir.rglob("*") if f.is_file()]
+      print(f"Iniciando upload de {len(files)} arquivos para {bucket}/GeoIP-Paises/")
+
+      for f in files:
+          key = "GeoIP-Paises/" + "/".join(f.relative_to(local_dir).parts)
+          s3.upload_file(str(f), bucket, key)
+          print(f"  uploaded: {key}")
+
+      print(f"Upload de {len(files)} arquivos concluído com sucesso!")
+      EOF
   only:
     - main
