@@ -1,0 +1,105 @@
+name: GeoIP
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 3,6"
+  workflow_dispatch:
+
+concurrency:
+  group: geoip
+  cancel-in-progress: false
+
+env:
+  EDITION_ID: GeoLite2-Country
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Baixar GeoLite2-Country
+        env:
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: |
+          curl -fsSL -o "${EDITION_ID}.tar.gz" \
+            "https://download.maxmind.com/app/geoip_download?edition_id=${EDITION_ID}&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz"
+          mkdir -p geoip_tmp
+          tar -xzf "${EDITION_ID}.tar.gz" -C geoip_tmp --strip-components=1
+          cp geoip_tmp/*.mmdb GeoLite2-Country.mmdb
+
+      - name: Gerar listas
+        run: |
+          python gerador_de_listas.py
+          ls -la GeoIP_Paises/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeoIP_Paises
+          path: GeoIP_Paises/
+          retention-days: 1
+
+  upload:
+    needs: generate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: GeoIP_Paises
+          path: GeoIP_Paises
+
+      - name: Enviar para Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          pip install boto3 --quiet
+          python3 - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          import boto3
+          from botocore.config import Config
+
+          local_dir = Path("GeoIP_Paises")
+          if not local_dir.is_dir():
+              print("Pasta GeoIP_Paises não encontrada!")
+              sys.exit(1)
+
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              region_name="auto",
+              config=Config(signature_version="s3v4"),
+          )
+
+          bucket = os.environ["R2_BUCKET"]
+          files = [f for f in local_dir.rglob("*") if f.is_file()]
+          print(f"Iniciando upload de {len(files)} arquivos para {bucket}/GeoIP-Paises/")
+
+          for f in files:
+              key = "GeoIP-Paises/" + "/".join(f.relative_to(local_dir).parts)
+              s3.upload_file(str(f), bucket, key)
+              print(f"  uploaded: {key}")
+
+          print(f"Upload de {len(files)} arquivos concluído com sucesso!")
+          PY

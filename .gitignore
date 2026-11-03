@@ -1,0 +1,9 @@
+.env
+.env.*
+*.mmdb
+*.tar.gz
+geoip_tmp/
+GeoIP_Paises/
+__pycache__/
+*.pyc
+.venv/
