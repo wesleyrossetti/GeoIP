@@ -1,10 +1,8 @@
 name: GeoIP
 
 on:
-  push:
-    branches: [main]
   schedule:
-    - cron: "0 6 * * 3,6"
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 concurrency:
